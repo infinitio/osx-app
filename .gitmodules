@@ -1,0 +1,9 @@
+[submodule "app/Sparkle"]
+	path = app/Sparkle
+	url = https://github.com/andymatuschak/Sparkle.git
+[submodule "app/InfinitApplication"]
+  path = app/InfinitApplication
+  url = git@git.infinit.io:cocoa-app
+[submodule "app/Gap"]
+  path = app/Gap
+  url = git@git.infinit.io:objc-gap
