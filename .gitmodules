@@ -1,0 +1,9 @@
+[submodule "Gap"]
+	path = Gap
+	url = ./app/Gap
+[submodule "InfinitApplication"]
+	path = InfinitApplication
+	url = ./app/InfinitApplication
+[submodule "Sparkle"]
+	path = Sparkle
+	url = ./app/Sparkle
