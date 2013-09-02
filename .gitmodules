@@ -7,3 +7,6 @@
 [submodule "app/Gap"]
   path = app/Gap
   url = git@git.infinit.io:objc-gap
+[submodule "app/plcrashreporter"]
+	path = app/plcrashreporter
+	url = git@git.infinit.io:plcrashreporter
