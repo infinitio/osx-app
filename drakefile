@@ -1,0 +1,180 @@
+import drake
+import os
+import subprocess
+import tempfile
+
+class MacBundleBuilder(drake.Builder):
+
+  def __init__(self,
+               workspace,
+               scheme,
+               keychain,
+               keychain_password,
+               code_sign_identity,
+               dmg,
+               dmg_background):
+    drake.Builder.__init__(self, [workspace, keychain, dmg_background], [dmg])
+    self.__workspace = (drake.Path.cwd() / workspace.path()).canonize()
+    self.__scheme = scheme
+    self.__keychain = (drake.Path.cwd() / keychain.path()).canonize()
+    self.__keychain_password = keychain_password
+    self.__code_sign_identity = code_sign_identity
+    self.__dmg = dmg
+    self.__bundle_name = dmg.name().without_last_extension()
+    self.__dmg_background = \
+      (drake.Path.cwd() / dmg_background.path()).canonize()
+
+  def get_folder_size(self, folder):
+    total_size = os.path.getsize(folder)
+    for item in os.listdir(folder):
+      itempath = os.path.join(folder, item)
+      if os.path.islink(itempath):
+        continue
+      if os.path.isfile(itempath):
+        total_size += os.path.getsize(itempath)
+      elif os.path.isdir(itempath):
+        total_size += self.get_folder_size(itempath)
+    return total_size
+
+  def unlock_keychain(self):
+    output = subprocess.check_output(
+      ['security', 'list-keychains']).decode('utf-8').split('\n')
+    found = False
+    existing_keychains = []
+    for keychain in output:
+      # Don't want to re-add the system keychain.
+      if len(keychain.strip()) > 0:
+        if keychain.strip(' "') != '/Library/Keychains/System.keychain':
+          existing_keychains.append(keychain.strip(' "'))
+      if keychain.strip(' "') == self.__keychain:
+        found = True
+    if not found:
+      args = ['security', 'list-keychains', '-s']
+      args.extend(existing_keychains)
+      args.append(self.__keychain)
+      self.cmd('add keychain to search list', args)
+    self.cmd('unlock keychain',
+             ['security', 'unlock-keychain',
+              '-p', self.__keychain_password, self.__keychain])
+
+  def lock_keychain(self):
+    self.cmd('lock keychain',
+             ['security',
+              'lock-keychain', self.__keychain])
+
+  def make_archive(self):
+    self.cmd('build archive',
+             ['xcodebuild',
+              '-workspace', self.__workspace,
+              '-scheme', self.__scheme,
+              'clean', 'archive',
+              '-archivePath', self.__output_archive,
+              '-PBXBuildsContinueAfterErrors=NO',
+              'CODE_SIGN_IDENTITY=%s' % self.__code_sign_identity,
+              'OTHER_CODE_SIGN_FLAGS=--keychain %s' % self.__keychain,
+              '-configuration', 'release'])
+
+  def make_bundle(self):
+    self.cmd('make .app bundle',
+             ['xcodebuild',
+              '-exportArchive',
+              '-exportFormat', 'app',
+              '-archivePath', self.__archive,
+              '-exportPath', self.__bundle])
+
+  def check_code_signing(self):
+    self.cmd('execute allowed check',
+             ['spctl', '-a', '-vv', '--type', 'execute', '--no-cache',
+              self.__bundle])
+    self.cmd('codesign check',
+             ['codesign', '--verify', '-vv', '--deep', self.__bundle])
+
+  def generate_dmg(self, temp_dir):
+    temp_dmg_file = '%s/Infinit.tmp.dmg' % temp_dir
+    self.cmd('create dmg',
+             ['hdiutil', 'create',
+              '-srcfolder', self.__bundle,
+              '-fs', 'HFS+',
+              '-fsargs', '-c c=64,a=16,e=16',
+              '-size', '%dm' %
+              int(self.get_folder_size(self.__bundle) / 1000000 + 40),
+              '-format', 'UDRW',
+              '-volname', self.__bundle_name,
+              temp_dmg_file])
+    mountpoint = '%s/infinit-dmg-mount' % temp_dir
+    out = subprocess.check_output(
+      ['hdiutil', 'attach',
+       '-readwrite',
+       '-noverify',
+       '-noautoopen',
+       '-mountpoint', mountpoint,
+       temp_dmg_file]).decode('utf-8').split('\n')[1]
+    device = out.split('\t')[0].strip()
+    self.cmd('add hidden background folder',
+             ['mkdir', '-p', '%s/.background' % mountpoint])
+    self.cmd('copy background image to dmg',
+             ['cp', self.__dmg_background,
+              '%s/.background/image.png' % mountpoint])
+    self.cmd('add shortcut to /Applications',
+             ['ln', '-s', '/Applications',
+              '%s/Applications' % mountpoint])
+    apple_script = """
+    tell application "Finder"
+      tell disk "%(device)s"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {200, 100, 900, 538}
+        set theViewOptions to the icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 150
+        set background picture of theViewOptions to file ".background:image.png"
+        delay 3
+        set position of item "%(bundle_name)s.app" of container window to {180, 250}
+        close
+        open
+        set position of item "Applications" of container window to {495, 250}
+        close
+        open
+        update without registering applications
+        delay 5
+        eject
+      end tell
+    end tell
+    """ % {'device': 'infinit-dmg-mount', 'bundle_name': self.__bundle_name}
+    self.cmd('align dmg icons',
+             ['osascript', '-e', apple_script])
+    self.cmd('compress and output dmg',
+             ['hdiutil', 'convert', temp_dmg_file,
+              '-format', 'UDZO',
+              '-imagekey', 'zlib-level=9',
+              '-o', self.__dmg.path()])
+
+  def execute(self):
+    with tempfile.TemporaryDirectory() as d:
+      self.__output_archive = '%s/%s' % (d, self.__bundle_name)
+      self.__archive = '%s.xcarchive' % self.__output_archive
+      self.__bundle = '%s/%s.app' % (d, self.__bundle_name)
+      self.unlock_keychain()
+      self.make_archive()
+      self.lock_keychain()
+      self.make_bundle()
+      self.check_code_signing()
+      self.generate_dmg(d)
+    return True
+
+def configure():
+  dmg = drake.node('Infinit.dmg')
+  workspace = drake.node('Infinit.xcworkspace')
+  keychain = drake.node('build_resources/AppSign.keychain')
+  dmg_background = drake.node('build_resources/dmg_background.png')
+  builder = MacBundleBuilder(
+    workspace = workspace,
+    scheme = 'InfinitApplication',
+    keychain = keychain,
+    keychain_password = 'jEWC9Fsm5skeychain',
+    code_sign_identity = 'Developer ID Application: infinit.io',
+    dmg = dmg,
+    dmg_background = dmg_background,
+  )
