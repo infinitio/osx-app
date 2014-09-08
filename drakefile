@@ -19,7 +19,7 @@ class MacBundleBuilder(drake.Builder):
     self.__keychain = (drake.Path.cwd() / keychain.path()).canonize()
     self.__keychain_password = keychain_password
     self.__code_sign_identity = code_sign_identity
-    self.__dmg = dmg
+    self.__dmg = (drake.Path.cwd() / dmg.path()).canonize()
     self.__bundle_name = dmg.name().without_last_extension()
     self.__dmg_background = \
       (drake.Path.cwd() / dmg_background.path()).canonize()
@@ -67,7 +67,7 @@ class MacBundleBuilder(drake.Builder):
              ['xcodebuild',
               '-workspace', self.__workspace,
               '-scheme', self.__scheme,
-              'clean', 'archive',
+              'archive',
               '-archivePath', self.__output_archive,
               '-PBXBuildsContinueAfterErrors=NO',
               'CODE_SIGN_IDENTITY=%s' % self.__code_sign_identity,
@@ -145,11 +145,14 @@ class MacBundleBuilder(drake.Builder):
     """ % {'device': 'infinit-dmg-mount', 'bundle_name': self.__bundle_name}
     self.cmd('align dmg icons',
              ['osascript', '-e', apple_script])
+
+    if os.path.exists(str(self.__dmg)):
+      os.unlink(str(self.__dmg))
     self.cmd('compress and output dmg',
              ['hdiutil', 'convert', temp_dmg_file,
               '-format', 'UDZO',
               '-imagekey', 'zlib-level=9',
-              '-o', self.__dmg.path()])
+              '-o', self.__dmg])
 
   def execute(self):
     with tempfile.TemporaryDirectory() as d:
