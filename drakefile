@@ -25,13 +25,12 @@ class Keychain():
       args = ['security', 'list-keychains', '-s']
       args.extend(existing_keychains)
       args.append(self.__keychain)
-      subprocess.check_call(args, throw = True)
+      subprocess.check_call(args)
     subprocess.check_call(['security', 'unlock-keychain', '-p',
                            self.__keychain_password, self.__keychain])
 
   def _lock_keychain(self):
-    subprocess.check_call('lock keychain',
-                          ['security', 'lock-keychain', self.__keychain])
+    subprocess.check_call(['security', 'lock-keychain', self.__keychain])
 
   def __enter__(self):
     self._unlock_keychain()
