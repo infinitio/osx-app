@@ -73,7 +73,9 @@ class MacBundleBuilder(drake.Builder):
               '-PBXBuildsContinueAfterErrors=NO',
               'CODE_SIGN_IDENTITY=%s' % self.__code_sign_identity,
               'OTHER_CODE_SIGN_FLAGS=--keychain %s' % self.__keychain,
-              '-configuration', 'release'], throw = True)
+              'INFINIT_BUILD_DIR=%s' % str(drake.path_root()),
+              '-configuration', 'release'],
+              throw = True)
 
   def make_bundle(self):
     self.cmd('make .app bundle',
