@@ -3,6 +3,43 @@ import os
 import subprocess
 import tempfile
 
+class Keychain():
+
+  def __init__(self, keychain_path, keychain_password):
+    self.__keychain = str(keychain_path)
+    self.__keychain_password = keychain_password
+
+  def _unlock_keychain(self):
+    output = subprocess.check_output(
+      ['security', 'list-keychains']).decode('utf-8').split('\n')
+    found = False
+    existing_keychains = []
+    for keychain in output:
+      # Don't want to re-add the system keychain.
+      if len(keychain.strip()) > 0:
+        if keychain.strip(' "') != '/Library/Keychains/System.keychain':
+          existing_keychains.append(keychain.strip(' "'))
+      if keychain.strip(' "') == self.__keychain:
+        found = True
+    if not found:
+      args = ['security', 'list-keychains', '-s']
+      args.extend(existing_keychains)
+      args.append(self.__keychain)
+      subprocess.check_call(args, throw = True)
+    subprocess.check_call(['security', 'unlock-keychain', '-p',
+                           self.__keychain_password, self.__keychain])
+
+  def _lock_keychain(self):
+    subprocess.check_call('lock keychain',
+                          ['security', 'lock-keychain', self.__keychain])
+
+  def __enter__(self):
+    self._unlock_keychain()
+
+  def __exit__(self, *args):
+    self._lock_keychain()
+
+
 class MacBundleBuilder(drake.Builder):
 
   def __init__(self,
@@ -36,32 +73,6 @@ class MacBundleBuilder(drake.Builder):
       elif os.path.isdir(itempath):
         total_size += self.get_folder_size(itempath)
     return total_size
-
-  def unlock_keychain(self):
-    output = subprocess.check_output(
-      ['security', 'list-keychains']).decode('utf-8').split('\n')
-    found = False
-    existing_keychains = []
-    for keychain in output:
-      # Don't want to re-add the system keychain.
-      if len(keychain.strip()) > 0:
-        if keychain.strip(' "') != '/Library/Keychains/System.keychain':
-          existing_keychains.append(keychain.strip(' "'))
-      if keychain.strip(' "') == self.__keychain:
-        found = True
-    if not found:
-      args = ['security', 'list-keychains', '-s']
-      args.extend(existing_keychains)
-      args.append(self.__keychain)
-      self.cmd('add keychain to search list', args, throw = True)
-    self.cmd('unlock keychain',
-             ['security', 'unlock-keychain',
-              '-p', self.__keychain_password, self.__keychain], throw = True)
-
-  def lock_keychain(self):
-    self.cmd('lock keychain',
-             ['security',
-              'lock-keychain', self.__keychain], throw = True)
 
   def make_archive(self):
     self.cmd('build archive',
@@ -160,13 +171,12 @@ class MacBundleBuilder(drake.Builder):
 
   def execute(self):
     with tempfile.TemporaryDirectory() as d:
-      self.__derived_data = 'derived_data/%s' % d
+      self.__derived_data = '%s/derived_data' % d
       self.__output_archive = '%s/%s' % (d, self.__bundle_name)
       self.__archive = '%s.xcarchive' % self.__output_archive
       self.__bundle = '%s/%s.app' % (d, self.__bundle_name)
-      self.unlock_keychain()
-      self.make_archive()
-      self.lock_keychain()
+      with Keychain(self.__keychain, self.__keychain_password):
+        self.make_archive()
       self.make_bundle()
       self.check_code_signing()
       self.generate_dmg(d)
