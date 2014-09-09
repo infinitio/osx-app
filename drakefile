@@ -70,6 +70,7 @@ class MacBundleBuilder(drake.Builder):
               '-scheme', self.__scheme,
               'archive',
               '-archivePath', self.__output_archive,
+              '-derivedDataPath', self.__derived_data,
               '-PBXBuildsContinueAfterErrors=NO',
               'CODE_SIGN_IDENTITY=%s' % self.__code_sign_identity,
               'OTHER_CODE_SIGN_FLAGS=--keychain %s' % self.__keychain,
@@ -159,6 +160,7 @@ class MacBundleBuilder(drake.Builder):
 
   def execute(self):
     with tempfile.TemporaryDirectory() as d:
+      self.__derived_data = 'derived_data/%s' % d
       self.__output_archive = '%s/%s' % (d, self.__bundle_name)
       self.__archive = '%s.xcarchive' % self.__output_archive
       self.__bundle = '%s/%s.app' % (d, self.__bundle_name)
