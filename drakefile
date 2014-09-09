@@ -11,6 +11,7 @@ class MacBundleBuilder(drake.Builder):
                keychain,
                keychain_password,
                code_sign_identity,
+               bundle,
                dmg,
                dmg_background):
     drake.Builder.__init__(self, [workspace, keychain, dmg_background], [dmg])
@@ -20,7 +21,7 @@ class MacBundleBuilder(drake.Builder):
     self.__keychain_password = keychain_password
     self.__code_sign_identity = code_sign_identity
     self.__dmg = (drake.Path.cwd() / dmg.path()).canonize()
-    self.__bundle_name = dmg.name().without_last_extension()
+    self.__bundle_name = bundle
     self.__dmg_background = \
       (drake.Path.cwd() / dmg_background.path()).canonize()
 
@@ -169,7 +170,8 @@ class MacBundleBuilder(drake.Builder):
 
 def configure():
   git = drake.git.Git('../..')
-  dmg = drake.node('Infinit-%s.dmg' % git.version())
+  bundle = 'Infinit'
+  dmg = drake.node('%s-%s.dmg' % (bundle, git.version()))
   workspace = drake.node('Infinit.xcworkspace')
   keychain = drake.node('build_resources/AppSign.keychain')
   dmg_background = drake.node('build_resources/dmg_background.png')
@@ -179,6 +181,7 @@ def configure():
     keychain = keychain,
     keychain_password = 'jEWC9Fsm5skeychain',
     code_sign_identity = 'Developer ID Application: infinit.io',
+    bundle = bundle,
     dmg = dmg,
     dmg_background = dmg_background,
   )
