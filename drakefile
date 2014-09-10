@@ -184,7 +184,7 @@ class MacBundleBuilder(drake.Builder):
 def configure():
   git = drake.git.Git('../..')
   bundle = 'Infinit'
-  dmg = drake.node('%s-%s.dmg' % (bundle, git.version()))
+  dmg = drake.node('%s-%s.dmg' % (bundle, git.description()))
   workspace = drake.node('Infinit.xcworkspace')
   keychain = drake.node('build_resources/AppSign.keychain')
   dmg_background = drake.node('build_resources/dmg_background.png')
