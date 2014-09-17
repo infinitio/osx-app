@@ -10,3 +10,6 @@
 [submodule "app/plcrashreporter"]
 	path = app/plcrashreporter
 	url = https://opensource.plausible.coop/stash/scm/plcr/plcrashreporter.git
+[submodule "installer"]
+	path = installer
+	url = git@git.infinit.io:osx-installer
