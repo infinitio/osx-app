@@ -61,6 +61,58 @@ class MacBundleBuilder(drake.Builder):
     self.__dmg_background = \
       (drake.Path.cwd() / dmg_background.path()).canonize()
 
+  @property
+  def workspace(self):
+    return self.__workspace
+
+  @property
+  def bundle_name(self):
+    return self.__bundle_name
+
+  @property
+  def dmg(self):
+    return self.__dmg
+
+  @property
+  def dmg_background(self):
+    return self.__dmg_background
+
+  @property
+  def keychain(self):
+    return self.__keychain
+
+  @property
+  def keychain_password(self):
+    return self.__keychain_password
+
+  @property
+  def archive(self):
+    return self.__archive
+  @archive.setter
+  def archive(self, value):
+    self.__archive = value
+
+  @property
+  def bundle(self):
+    return self._bundle
+  @bundle.setter
+  def bundle(self, value):
+    self._bundle = value
+
+  @property
+  def derived_data(self):
+    return self.__derived_data
+  @derived_data.setter
+  def derived_data(self, value):
+    self.__derived_data = value
+
+  @property
+  def output_archive(self):
+    return self.__output_archive
+  @output_archive.setter
+  def output_archive(self, value):
+    self.__output_archive = value
+
   def get_folder_size(self, folder):
     total_size = os.path.getsize(folder)
     for item in os.listdir(folder):
@@ -79,8 +131,8 @@ class MacBundleBuilder(drake.Builder):
               '-workspace', self.__workspace,
               '-scheme', self.__scheme,
               'archive',
-              '-archivePath', self.__output_archive,
-              '-derivedDataPath', self.__derived_data,
+              '-archivePath', self.output_archive,
+              '-derivedDataPath', self.derived_data,
               '-PBXBuildsContinueAfterErrors=NO',
               'CODE_SIGN_IDENTITY=%s' % self.__code_sign_identity,
               'OTHER_CODE_SIGN_FLAGS=--keychain %s' % self.__keychain,
@@ -93,27 +145,27 @@ class MacBundleBuilder(drake.Builder):
              ['xcodebuild',
               '-exportArchive',
               '-exportFormat', 'app',
-              '-archivePath', self.__archive,
-              '-exportPath', self.__bundle], throw = True)
+              '-archivePath', self.archive,
+              '-exportPath', self.bundle], throw = True)
 
   def check_code_signing(self):
     self.cmd('execute allowed check',
              ['spctl', '-a', '-vv', '--type', 'execute', '--no-cache',
-              self.__bundle], throw = True)
+              self.bundle], throw = True)
     self.cmd('codesign check',
-             ['codesign', '--verify', '-vv', '--deep', self.__bundle], throw = True)
+             ['codesign', '--verify', '-vv', '--deep', self.bundle], throw = True)
 
   def generate_dmg(self, temp_dir):
     temp_dmg_file = '%s/Infinit.tmp.dmg' % temp_dir
     self.cmd('create dmg',
              ['hdiutil', 'create',
-              '-srcfolder', self.__bundle,
+              '-srcfolder', self.bundle,
               '-fs', 'HFS+',
               '-fsargs', '-c c=64,a=16,e=16',
               '-size', '%dm' %
-              int(self.get_folder_size(self.__bundle) / 1000000 + 40),
+              int(self.get_folder_size(self.bundle) / 1000000 + 40),
               '-format', 'UDRW',
-              '-volname', self.__bundle_name,
+              '-volname', self.bundle_name,
               temp_dmg_file], throw = True)
     mountpoint = '%s/infinit-dmg-mount' % temp_dir
     out = subprocess.check_output(
@@ -127,7 +179,7 @@ class MacBundleBuilder(drake.Builder):
     self.cmd('add hidden background folder',
              ['mkdir', '-p', '%s/.background' % mountpoint], throw = True)
     self.cmd('copy background image to dmg',
-             ['cp', self.__dmg_background,
+             ['cp', self.dmg_background,
               '%s/.background/image.png' % mountpoint], throw = True)
     self.cmd('add shortcut to /Applications',
              ['ln', '-s', '/Applications',
@@ -156,7 +208,7 @@ class MacBundleBuilder(drake.Builder):
         eject
       end tell
     end tell
-    """ % {'device': 'infinit-dmg-mount', 'bundle_name': self.__bundle_name}
+    """ % {'device': 'infinit-dmg-mount', 'bundle_name': self.bundle_name}
     self.cmd('align dmg icons',
              ['osascript', '-e', apple_script], throw = True)
 
@@ -170,32 +222,147 @@ class MacBundleBuilder(drake.Builder):
 
   def execute(self):
     with tempfile.TemporaryDirectory() as d:
-      self.__derived_data = '%s/derived_data' % d
-      self.__output_archive = '%s/%s' % (d, self.__bundle_name)
-      self.__archive = '%s.xcarchive' % self.__output_archive
-      self.__bundle = '%s/%s.app' % (d, self.__bundle_name)
-      with Keychain(self.__keychain, self.__keychain_password):
+      self.derived_data = '%s/derived_data' % d
+      self.output_archive = '%s/%s' % (d, self.bundle_name)
+      self.archive = '%s.xcarchive' % self.output_archive
+      self.bundle = '%s/%s.app' % (d, self.bundle_name)
+      with Keychain(self.keychain, self.keychain_password):
         self.make_archive()
       self.make_bundle()
       self.check_code_signing()
       self.generate_dmg(d)
     return True
 
+class MacInstallBuilder(MacBundleBuilder):
+
+  def __init__(self,
+               workspace,
+               scheme,
+               keychain,
+               keychain_password,
+               code_sign_identity,
+               bundle,
+               dmg,
+               dmg_background):
+    MacBundleBuilder.__init__(self,
+                              workspace,
+                              scheme,
+                              keychain,
+                              keychain_password,
+                              code_sign_identity,
+                              bundle,
+                              dmg,
+                              dmg_background)
+
+  def fetch_deps(self):
+    self.cmd('fetch cocoapods dependencies',
+             ['pod', 'install'],
+             cwd = self.workspace / '..')
+
+  def generate_dmg(self, temp_dir):
+    temp_dmg_file = '%s/Infinit-Installer.tmp.dmg' % temp_dir
+    self.cmd('create dmg',
+             ['hdiutil', 'create',
+              '-srcfolder', self.bundle,
+              '-fs', 'HFS+',
+              '-fsargs', '-c c=64,a=16,e=16',
+              '-size', '%dm' %
+              int(self.get_folder_size(self.bundle) / 1000000 + 40),
+              '-format', 'UDRW',
+              '-volname', self.bundle_name,
+              temp_dmg_file], throw = True)
+    mountpoint = '%s/infinit-installer-dmg-mount' % temp_dir
+    out = subprocess.check_output(
+      ['hdiutil', 'attach',
+       '-readwrite',
+       '-noverify',
+       '-noautoopen',
+       '-mountpoint', mountpoint,
+       temp_dmg_file]).decode('utf-8').split('\n')[1]
+    device = out.split('\t')[0].strip()
+    self.cmd('add hidden background folder',
+             ['mkdir', '-p', '%s/.background' % mountpoint], throw = True)
+    self.cmd('copy background image to dmg',
+             ['cp', self.dmg_background,
+              '%s/.background/image.png' % mountpoint], throw = True)
+    apple_script = """
+    tell application "Finder"
+      tell disk "%(device)s"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {200, 100, 650, 550}
+        set theViewOptions to the icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 175
+        set background picture of theViewOptions to file ".background:image.png"
+        delay 3
+        set position of item "%(bundle_name)s.app" of container window to {225, 250}
+        close
+        open
+        update without registering applications
+        delay 5
+        eject
+      end tell
+    end tell
+    """ % {'device': 'infinit-installer-dmg-mount',
+           'bundle_name': self.bundle_name}
+    self.cmd('align dmg icons',
+             ['osascript', '-e', apple_script], throw = True)
+    if os.path.exists(str(self.dmg)):
+      os.unlink(str(self.dmg))
+    self.cmd('compress and output dmg',
+             ['hdiutil', 'convert', temp_dmg_file,
+              '-format', 'UDZO',
+              '-imagekey', 'zlib-level=9',
+              '-o', self.dmg], throw = True)
+
+  def execute(self):
+    # self.fetch_deps()
+    with tempfile.TemporaryDirectory() as d:
+      self.derived_data = '%s/derived_data' % d
+      self.output_archive = '%s/%s' % (d, self.bundle_name)
+      self.archive = '%s.xcarchive' % self.output_archive
+      self.bundle = '%s/%s.app' % (d, self.bundle_name)
+      with Keychain(self.keychain, self.keychain_password):
+        self.make_archive()
+      self.make_bundle()
+      self.check_code_signing()
+      self.generate_dmg(d)
+
 def configure():
   git = drake.git.Git('../..')
   bundle = 'Infinit'
-  dmg = drake.node('%s-%s.dmg' % (bundle, git.description()))
-  workspace = drake.node('Infinit.xcworkspace')
+  print('xxx %s' % git.description())
+  bundle_dmg = drake.node('%s-%s.dmg' % (bundle, git.description()))
+  bundle_workspace = drake.node('Infinit.xcworkspace')
   keychain = drake.node('build_resources/AppSign.keychain')
-  dmg_background = drake.node('build_resources/dmg_background.png')
-  builder = MacBundleBuilder(
-    workspace = workspace,
+  bundle_dmg_background = drake.node('build_resources/dmg_background.png')
+  bundle_builder = MacBundleBuilder(
+    workspace = bundle_workspace,
     scheme = 'InfinitApplication',
     keychain = keychain,
     keychain_password = 'jEWC9Fsm5skeychain',
     code_sign_identity = 'Developer ID Application: infinit.io',
     bundle = bundle,
-    dmg = dmg,
-    dmg_background = dmg_background,
+    dmg = bundle_dmg,
+    dmg_background = bundle_dmg_background,
   )
-  drake.Rule('package') << dmg
+
+  installer_workspace = drake.node('installer/InfinitInstaller.xcworkspace')
+  installer_dmg = \
+    drake.node('%s-Installer-%s.dmg' % (bundle, git.description()))
+  installer_dmg_background = drake.node('installer/background.png')
+  install_builder = MacInstallBuilder(
+    workspace = installer_workspace,
+    scheme = 'InfinitInstaller',
+    keychain = keychain,
+    keychain_password = 'jEWC9Fsm5skeychain',
+    code_sign_identity = 'Developer ID Application: infinit.io',
+    bundle = bundle,
+    dmg = installer_dmg,
+    dmg_background = installer_dmg_background
+  )
+
+  drake.Rule('package') << bundle_dmg
