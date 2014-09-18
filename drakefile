@@ -319,7 +319,7 @@ class MacInstallBuilder(MacBundleBuilder):
               '-o', self.dmg], throw = True)
 
   def execute(self):
-    # self.fetch_deps()
+    self.fetch_deps()
     with tempfile.TemporaryDirectory() as d:
       self.derived_data = '%s/derived_data' % d
       self.output_archive = '%s/%s' % (d, self.bundle_name)
@@ -330,11 +330,11 @@ class MacInstallBuilder(MacBundleBuilder):
       self.make_bundle()
       self.check_code_signing()
       self.generate_dmg(d)
+    return True
 
 def configure():
   git = drake.git.Git('../..')
   bundle = 'Infinit'
-  print('xxx %s' % git.description())
   bundle_dmg = drake.node('%s-%s.dmg' % (bundle, git.description()))
   bundle_workspace = drake.node('Infinit.xcworkspace')
   keychain = drake.node('build_resources/AppSign.keychain')
@@ -353,7 +353,7 @@ def configure():
   installer_workspace = drake.node('installer/InfinitInstaller.xcworkspace')
   installer_dmg = \
     drake.node('%s-Installer-%s.dmg' % (bundle, git.description()))
-  installer_dmg_background = drake.node('installer/background.png')
+  installer_dmg_background = drake.node('installer/background.tiff')
   install_builder = MacInstallBuilder(
     workspace = installer_workspace,
     scheme = 'InfinitInstaller',
