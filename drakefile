@@ -338,18 +338,19 @@ def configure():
   bundle_dmg = drake.node('%s-%s.dmg' % (bundle, git.description()))
   bundle_workspace = drake.node('Infinit.xcworkspace')
   keychain = drake.node('build_resources/AppSign.keychain')
+  keychain_password = 'jEWC9Fsm5skeychain'
+  code_sign_identity = 'Developer ID Application: infinit.io'
   bundle_dmg_background = drake.node('build_resources/dmg_background.png')
   bundle_builder = MacBundleBuilder(
     workspace = bundle_workspace,
     scheme = 'InfinitApplication',
     keychain = keychain,
-    keychain_password = 'jEWC9Fsm5skeychain',
-    code_sign_identity = 'Developer ID Application: infinit.io',
+    keychain_password = keychain_password,
+    code_sign_identity = code_sign_identity,
     bundle = bundle,
     dmg = bundle_dmg,
     dmg_background = bundle_dmg_background,
   )
-
   installer_workspace = drake.node('installer/InfinitInstaller.xcworkspace')
   installer_dmg = \
     drake.node('%s-Installer-%s.dmg' % (bundle, git.description()))
@@ -358,8 +359,8 @@ def configure():
     workspace = installer_workspace,
     scheme = 'InfinitInstaller',
     keychain = keychain,
-    keychain_password = 'jEWC9Fsm5skeychain',
-    code_sign_identity = 'Developer ID Application: infinit.io',
+    keychain_password = keychain_password,
+    code_sign_identity = code_sign_identity,
     bundle = bundle,
     dmg = installer_dmg,
     dmg_background = installer_dmg_background
