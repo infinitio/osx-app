@@ -135,7 +135,7 @@ class MacBundleBuilder(drake.Builder):
               '-derivedDataPath', self.derived_data,
               '-PBXBuildsContinueAfterErrors=NO',
               'CODE_SIGN_IDENTITY=%s' % self.__code_sign_identity,
-              'OTHER_CODE_SIGN_FLAGS=--force --verbose --keychain %s' % self.__keychain,
+              'OTHER_CODE_SIGN_FLAGS=--verbose --keychain %s' % self.__keychain,
               'INFINIT_BUILD_DIR=%s' % str(drake.path_root()),
               '-configuration', 'release'],
               throw = True)
