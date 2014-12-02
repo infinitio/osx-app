@@ -49,7 +49,9 @@ class MacBundleBuilder(drake.Builder):
                code_sign_identity,
                bundle,
                dmg,
-               dmg_background):
+               dmg_background,
+               version_file = None,
+               version = None):
     drake.Builder.__init__(self, [workspace, keychain, dmg_background], [dmg])
     self.__workspace = (drake.Path.cwd() / workspace.path()).canonize()
     self.__scheme = scheme
@@ -60,6 +62,11 @@ class MacBundleBuilder(drake.Builder):
     self.__bundle_name = bundle
     self.__dmg_background = \
       (drake.Path.cwd() / dmg_background.path()).canonize()
+    self.__version = version
+    if version_file:
+      self.__version_file = (drake.Path.cwd() / version_file.path()).canonize()
+    else:
+      self.__version_file = None
 
   @property
   def workspace(self):
@@ -113,6 +120,14 @@ class MacBundleBuilder(drake.Builder):
   def output_archive(self, value):
     self.__output_archive = value
 
+  @property
+  def version_file(self):
+    return self.__version_file
+
+  @property
+  def version(self):
+    return self.__version
+
   def get_folder_size(self, folder):
     total_size = os.path.getsize(folder)
     for item in os.listdir(folder):
@@ -124,6 +139,17 @@ class MacBundleBuilder(drake.Builder):
       elif os.path.isdir(itempath):
         total_size += self.get_folder_size(itempath)
     return total_size
+
+  def set_version(self):
+    self.cmd('set build version',
+      ['defaults', 'write', self.version_file, 'CFBundleVersion', self.version],
+      throw = True)
+    self.cmd('set human version',
+      ['defaults', 'write', self.version_file,
+       'CFBundleShortVersionString', self.version],
+       throw = True)
+    self.cmd('convert to XML',
+      ['plutil', '-convert', 'xml1', self.version_file], throw = True)
 
   def make_archive(self):
     self.cmd('build archive',
@@ -153,7 +179,8 @@ class MacBundleBuilder(drake.Builder):
              ['spctl', '-a', '-vv', '--type', 'execute', '--no-cache',
               self.bundle], throw = True)
     self.cmd('codesign check',
-             ['codesign', '--verify', '-vv', '--deep', self.bundle], throw = True)
+             ['codesign', '--verify', '-vv', '--deep', self.bundle],
+             throw = True)
 
   def generate_dmg(self, temp_dir):
     temp_dmg_file = '%s/Infinit.tmp.dmg' % temp_dir
@@ -226,6 +253,8 @@ class MacBundleBuilder(drake.Builder):
       self.output_archive = '%s/%s' % (d, self.bundle_name)
       self.archive = '%s.xcarchive' % self.output_archive
       self.bundle = '%s/%s.app' % (d, self.bundle_name)
+      if self.version_file and self.version:
+        self.set_version()
       with Keychain(self.keychain, self.keychain_password):
         self.make_archive()
       self.make_bundle()
@@ -350,6 +379,9 @@ def configure():
     bundle = bundle,
     dmg = bundle_dmg,
     dmg_background = bundle_dmg_background,
+    version_file = drake.node(
+      'app/InfinitApplication/InfinitApplication/InfinitApplication-Info.plist'),
+    version = git.description(),
   )
   installer_workspace = drake.node('installer/InfinitInstaller.xcworkspace')
   installer_dmg = \
