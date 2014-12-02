@@ -3,6 +3,8 @@ import os
 import subprocess
 import tempfile
 
+build = None
+
 class Keychain():
 
   def __init__(self, keychain_path, keychain_password):
@@ -272,7 +274,9 @@ class MacInstallBuilder(MacBundleBuilder):
                code_sign_identity,
                bundle,
                dmg,
-               dmg_background):
+               dmg_background,
+               version_file,
+               version):
     MacBundleBuilder.__init__(self,
                               workspace,
                               scheme,
@@ -281,7 +285,9 @@ class MacInstallBuilder(MacBundleBuilder):
                               code_sign_identity,
                               bundle,
                               dmg,
-                              dmg_background)
+                              dmg_background,
+                              version_file,
+                              version)
 
   def fetch_deps(self):
     self.cmd('fetch cocoapods dependencies',
@@ -362,6 +368,8 @@ class MacInstallBuilder(MacBundleBuilder):
     return True
 
 def configure():
+  global build
+  build = drake.Rule('build')
   git = drake.git.Git('../..')
   bundle = 'Infinit'
   bundle_dmg = drake.node('%s-%s.dmg' % (bundle, git.description()))
@@ -395,7 +403,9 @@ def configure():
     code_sign_identity = code_sign_identity,
     bundle = bundle,
     dmg = installer_dmg,
-    dmg_background = installer_dmg_background
+    dmg_background = installer_dmg_background,
+    version_file = drake.node(
+      'installer/InfinitInstaller/InfinitInstaller-Info.plist'),
+    version = git.description(),
   )
-
-  drake.Rule('package') << bundle_dmg
+  build << bundle_dmg
