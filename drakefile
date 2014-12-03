@@ -409,3 +409,4 @@ def configure():
     version = git.description(),
   )
   build << bundle_dmg
+  drake.Rule('package') << bundle_dmg
