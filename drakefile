@@ -60,15 +60,12 @@ class MacBundleBuilder(drake.Builder):
     self.__keychain = (drake.Path.cwd() / keychain.path()).canonize()
     self.__keychain_password = keychain_password
     self.__code_sign_identity = code_sign_identity
-    self.__dmg = (drake.Path.cwd() / dmg.path()).canonize()
+    self.__dmg = dmg
     self.__bundle_name = bundle
     self.__dmg_background = \
       (drake.Path.cwd() / dmg_background.path()).canonize()
     self.__version = version
-    if version_file:
-      self.__version_file = (drake.Path.cwd() / version_file.path()).canonize()
-    else:
-      self.__version_file = None
+    self.__version_file = version_file
 
   @property
   def workspace(self):
@@ -143,18 +140,19 @@ class MacBundleBuilder(drake.Builder):
     return total_size
 
   def set_version(self):
-    self.cmd('set build version',
-      ['defaults', 'write', self.version_file, 'CFBundleVersion', self.version],
+    def defaults(attr):
+      return ['defaults', 'write', self.version_file.path(), attr, self.version]
+    self.cmd(
+      'Set version in %s' % self.version_file,
+      (
+        defaults('CFBundleVersion'), # Build version
+        defaults('CFBundleShortVersionString'), # Human readable version
+        ['plutil', '-convert', 'xml1', self.version_file.path()], # To XML
+      ),
       throw = True)
-    self.cmd('set human version',
-      ['defaults', 'write', self.version_file,
-       'CFBundleShortVersionString', self.version],
-       throw = True)
-    self.cmd('convert to XML',
-      ['plutil', '-convert', 'xml1', self.version_file], throw = True)
 
   def make_archive(self):
-    self.cmd('build archive',
+    self.cmd('Archive %s' % self.output_archive,
              ['xcodebuild',
               '-workspace', self.__workspace,
               '-scheme', self.__scheme,
@@ -169,7 +167,7 @@ class MacBundleBuilder(drake.Builder):
               throw = True)
 
   def make_bundle(self):
-    self.cmd('make .app bundle',
+    self.cmd('Bundle %s' % self.bundle,
              ['xcodebuild',
               '-exportArchive',
               '-exportFormat', 'app',
@@ -177,16 +175,18 @@ class MacBundleBuilder(drake.Builder):
               '-exportPath', self.bundle], throw = True)
 
   def check_code_signing(self):
-    self.cmd('execute allowed check',
-             ['spctl', '-a', '-vv', '--type', 'execute', '--no-cache',
-              self.bundle], throw = True)
-    self.cmd('codesign check',
-             ['codesign', '--verify', '-vv', '--deep', self.bundle],
-             throw = True)
+    self.cmd(
+      'Check signing of %s' % self.bundle,
+      (
+        ['spctl', '-a', '-vv', '--type', 'execute', '--no-cache', self.bundle],
+        ['codesign', '--verify', '-vv', '--deep', self.bundle],
+      ),
+      throw = True,
+    )
 
   def generate_dmg(self, temp_dir):
     temp_dmg_file = '%s/Infinit.tmp.dmg' % temp_dir
-    self.cmd('create dmg',
+    self.cmd('Create %s' % self.bundle,
              ['hdiutil', 'create',
               '-srcfolder', self.bundle,
               '-fs', 'HFS+',
@@ -205,14 +205,6 @@ class MacBundleBuilder(drake.Builder):
        '-mountpoint', mountpoint,
        temp_dmg_file]).decode('utf-8').split('\n')[1]
     device = out.split('\t')[0].strip()
-    self.cmd('add hidden background folder',
-             ['mkdir', '-p', '%s/.background' % mountpoint], throw = True)
-    self.cmd('copy background image to dmg',
-             ['cp', self.dmg_background,
-              '%s/.background/image.png' % mountpoint], throw = True)
-    self.cmd('add shortcut to /Applications',
-             ['ln', '-s', '/Applications',
-              '%s/Applications' % mountpoint], throw = True)
     apple_script = """
     tell application "Finder"
       tell disk "%(device)s"
@@ -238,16 +230,23 @@ class MacBundleBuilder(drake.Builder):
       end tell
     end tell
     """ % {'device': 'infinit-dmg-mount', 'bundle_name': self.bundle_name}
-    self.cmd('align dmg icons',
-             ['osascript', '-e', apple_script], throw = True)
-
-    if os.path.exists(str(self.__dmg)):
-      os.unlink(str(self.__dmg))
-    self.cmd('compress and output dmg',
+    self.cmd(
+      'Layout %s' % self.bundle,
+      (
+        ['mkdir', '-p', '%s/.background' % mountpoint],
+        ['cp', self.dmg_background, '%s/.background/image.png' % mountpoint],
+        ['ln', '-s', '/Applications', '%s/Applications' % mountpoint],
+        ['osascript', '-e', apple_script],
+      ),
+      throw = True,
+    )
+    self.dmg.path().remove()
+    self.cmd('Compress %s' % self.dmg,
              ['hdiutil', 'convert', temp_dmg_file,
               '-format', 'UDZO',
               '-imagekey', 'zlib-level=9',
-              '-o', self.__dmg], throw = True)
+              '-o', self.dmg.path()],
+             throw = True)
 
   def execute(self):
     with tempfile.TemporaryDirectory() as d:
@@ -296,7 +295,7 @@ class MacInstallBuilder(MacBundleBuilder):
 
   def generate_dmg(self, temp_dir):
     temp_dmg_file = '%s/Infinit-Installer.tmp.dmg' % temp_dir
-    self.cmd('create dmg',
+    self.cmd('Create %s' % self.bundle,
              ['hdiutil', 'create',
               '-srcfolder', self.bundle,
               '-fs', 'HFS+',
@@ -315,11 +314,6 @@ class MacInstallBuilder(MacBundleBuilder):
        '-mountpoint', mountpoint,
        temp_dmg_file]).decode('utf-8').split('\n')[1]
     device = out.split('\t')[0].strip()
-    self.cmd('add hidden background folder',
-             ['mkdir', '-p', '%s/.background' % mountpoint], throw = True)
-    self.cmd('copy background image to dmg',
-             ['cp', self.dmg_background,
-              '%s/.background/image.png' % mountpoint], throw = True)
     apple_script = """
     tell application "Finder"
       tell disk "%(device)s"
