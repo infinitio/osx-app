@@ -140,14 +140,15 @@ class MacBundleBuilder(drake.Builder):
     return total_size
 
   def set_version(self):
+    canonized_version_file = (drake.Path.cwd() / self.version_file.path()).canonize()
     def defaults(attr):
-      return ['defaults', 'write', self.version_file.path(), attr, self.version]
+      return ['defaults', 'write', canonized_version_file, attr, self.version]
     self.cmd(
       'Set version in %s' % self.version_file,
       (
         defaults('CFBundleVersion'), # Build version
         defaults('CFBundleShortVersionString'), # Human readable version
-        ['plutil', '-convert', 'xml1', self.version_file.path()], # To XML
+        ['plutil', '-convert', 'xml1', canonized_version_file], # To XML
       ),
       throw = True)
 
