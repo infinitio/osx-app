@@ -40,6 +40,34 @@ class Keychain():
   def __exit__(self, *args):
     self._lock_keychain()
 
+class DMGFingerprintPlaceholder():
+
+  def __init__(self, dmg_path, placeholder):
+    self.__dmg_path = str(dmg_path)
+    self.__placeholder = placeholder
+    self.__search_str = '<key>plst</key>\n\t\t<array>\n\t\t\t<dict>\n\t\t\t\t<key>Attributes</key>\n\t\t\t\t<string>0x0050</string>\n\t\t\t\t<key>Data</key>\n\t\t\t\t<data>\n\t\t\t\t'
+    self._add_fingerprint_placeholder()
+    self._check_fingerprint_placeholder()
+
+  def _add_fingerprint_placeholder(self):
+    from mmap import mmap
+    with open(self.__dmg_path, 'r+b') as f:
+      with mmap(f.fileno(), 0) as m:
+        pos = m.find(bytes(self.__search_str, 'ascii'))
+        assert(pos != -1)
+        pos += len(self.__search_str)
+        m[pos:(pos + len(self.__placeholder))] = \
+          bytes(self.__placeholder, 'ascii')
+        m.flush()
+
+  def _check_fingerprint_placeholder(self):
+    from mmap import mmap
+    from mmap import ACCESS_READ
+    with open(self.__dmg_path, 'r') as f:
+      with mmap(f.fileno(), 0, access = ACCESS_READ) as m:
+        pos = m.find(bytes(self.__placeholder, 'ascii'))
+        assert(pos != -1)
+
 
 class MacBundleBuilder(drake.Builder):
 
@@ -275,7 +303,8 @@ class MacInstallBuilder(MacBundleBuilder):
                dmg,
                dmg_background,
                version_file,
-               version):
+               version,
+               fingerprint_placeholder):
     MacBundleBuilder.__init__(self,
                               workspace,
                               scheme,
@@ -287,6 +316,7 @@ class MacInstallBuilder(MacBundleBuilder):
                               dmg_background,
                               version_file,
                               version)
+    self.__fingerprint_placeholder = fingerprint_placeholder;
 
   def fetch_deps(self):
     self.cmd('fetch cocoapods dependencies',
@@ -363,6 +393,7 @@ class MacInstallBuilder(MacBundleBuilder):
       self.make_bundle()
       self.check_code_signing()
       self.generate_dmg(d)
+    DMGFingerprintPlaceholder(self.dmg, self.__fingerprint_placeholder)
     return True
 
 def configure():
@@ -405,6 +436,7 @@ def configure():
     version_file = drake.node(
       'installer/InfinitInstaller/InfinitInstaller-Info.plist'),
     version = git.description(),
+    fingerprint_placeholder = 'INFINIT_FINGERPRINT:0123456789ABCDEF',
   )
   build << bundle_dmg
   drake.Rule('package') << bundle_dmg
