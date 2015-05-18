@@ -325,7 +325,7 @@ class MacInstallBuilder(MacBundleBuilder):
         set theViewOptions to the icon view options of container window
         set arrangement of theViewOptions to not arranged
         set icon size of theViewOptions to 175
-        set background picture of theViewOptions to file ".background:image.png"
+        set background picture of theViewOptions to file ".background:image.tiff"
         delay 3
         set position of item "%(bundle_name)s.app" of container window to {225, 250}
         close
@@ -337,8 +337,12 @@ class MacInstallBuilder(MacBundleBuilder):
     end tell
     """ % {'device': 'infinit-installer-dmg-mount',
            'bundle_name': self.bundle_name}
-    self.cmd('align dmg icons',
-             ['osascript', '-e', apple_script], throw = True)
+    self.cmd('Layout %s' % self.bundle,
+      (
+        ['mkdir', '-p', '%s/.background' % mountpoint],
+        ['cp', self.dmg_background, '%s/.background/image.tiff' % mountpoint],
+        ['osascript', '-e', apple_script],
+      ), throw = True)
     if os.path.exists(str(self.dmg)):
       os.unlink(str(self.dmg))
     self.cmd('compress and output dmg',
