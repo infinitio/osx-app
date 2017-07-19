@@ -1,9 +1,9 @@
 [submodule "app/Sparkle"]
 	path = app/Sparkle
-	url = https://github.com/infinitdotio/Sparkle.git
+	url = ../Sparkle.git
 [submodule "app/InfinitApplication"]
-  path = app/InfinitApplication
-  url = git@git.infinit.io:cocoa-app
+	path = app/InfinitApplication
+	url = ../cocoa-app
 [submodule "installer"]
 	path = installer
-	url = git@git.infinit.io:osx-installer
+	url = ../osx-installer
